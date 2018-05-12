@@ -1,0 +1,4 @@
+行 14: 控件 SysInfo1 的类 SysInfoLib.SysInfo 不是一个已加载的控件类。
+行 17: 属性名 _ExtentX 在 SysInfo1 中是无效的。
+行 18: 属性名 _ExtentY 在 SysInfo1 中是无效的。
+行 19: 属性名 _Version 在 SysInfo1 中是无效的。
