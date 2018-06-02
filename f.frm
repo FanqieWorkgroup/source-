@@ -16,12 +16,20 @@ Begin VB.Form frmOptions
    ScaleWidth      =   6150
    ShowInTaskbar   =   0   'False
    StartUpPosition =   2  '屏幕中心
+   Begin VB.CheckBox Check2 
+      Caption         =   "静默模式"
+      Height          =   735
+      Left            =   960
+      TabIndex        =   9
+      Top             =   2400
+      Width           =   3735
+   End
    Begin VB.CheckBox Check1 
       Caption         =   "开启主动防护"
       Height          =   735
       Left            =   960
       TabIndex        =   8
-      Top             =   1920
+      Top             =   1200
       Width           =   3855
    End
    Begin MSComctlLib.TabStrip TabStrip1 

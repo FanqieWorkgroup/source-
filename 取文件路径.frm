@@ -25,6 +25,7 @@ Begin VB.Form form1
       ScaleWidth      =   1140
       TabIndex        =   9
       Top             =   4200
+      Visible         =   0   'False
       Width           =   1200
    End
    Begin VB.ListBox List2 
@@ -123,7 +124,7 @@ frmOptions.Show
 End Sub
 
 Private Sub Command2_Click()
-
+Dialog.Show
 Dim SearchPath As String, FindStr As String
 Dim FileSize As Long
 Dim NumFiles As Integer, NumDirs As Integer
@@ -134,7 +135,7 @@ Call USBDISK
 For i = 0 To List3.ListCount - 1
 SearchPath = List3.List(i) & ":\"
 FindStr = "*.*"
-FileSize = FindFilesAPI(SearchPath, FindStr, NumFiles, NumDirs)
+FileSize = FindFilesAPI2(SearchPath, FindStr, NumFiles, NumDirs)
 Screen.MousePointer = vbDefault
 Next i
 End Sub
@@ -153,8 +154,152 @@ End Function
 
 '窗体代码
 
+Function FindFilesAPIq(path As String, SearchStr As String, _
+FileCount As Integer, DirCount As Integer) '静默模式
+Dim FileName As String ' Walking filename variable...
+Dim DirName As String ' SubDirectory Name
+Dim dirNames() As String ' Buffer for directory name entries
+Dim nDir As Integer ' Number of directories in this path
+Dim i As Integer ' For-loop counter...
+Dim hSearch As Long ' Search Handle
+Dim WFD As WIN32_FIND_DATA
+Dim Cont As Integer
+Dim FT As FILETIME
+Dim ST As SYSTEMTIME
+Dim DateCStr As String, DateMStr As String
+If Right(path, 1) <> "\" Then path = path & "\"
+' Search for subdirectories.
+nDir = 0
+ReDim dirNames(nDir)
+Cont = True
+hSearch = FindFirstFile(path & "*", WFD)
+If hSearch <> INVALID_HANDLE_VALUE Then
+Do While Cont
+DirName = StripNulls(WFD.cFileName)
+' Ignore the current and encompassing directories.
+If (DirName <> ".") And (DirName <> "..") Then
+' Check for directory with bitwise comparison.
+If GetFileAttributes(path & DirName) And _
+FILE_ATTRIBUTE_DIRECTORY Then
+dirNames(nDir) = DirName
+DirCount = DirCount + 1
+nDir = nDir + 1
+ReDim Preserve dirNames(nDir)
+' Uncomment the next line to list directories
+'List1.AddItem path & FileName
+End If
+End If
+Cont = FindNextFile(hSearch, WFD) ' Get next subdirectory.
+Loop
+Cont = FindClose(hSearch)
+End If
+' Walk through this directory and sum file sizes.
+hSearch = FindFirstFile(path & SearchStr, WFD)
+Cont = True
+If hSearch <> INVALID_HANDLE_VALUE Then
+While Cont
+FileName = StripNulls(WFD.cFileName)
+If (FileName <> ".") And (FileName <> "..") And _
+((GetFileAttributes(path & FileName) And _
+FILE_ATTRIBUTE_DIRECTORY) <> FILE_ATTRIBUTE_DIRECTORY) Then
+FindFilesAPIq = FindFilesAPIq + (WFD.nFileSizeHigh * _
+MAXDWORD) + WFD.nFileSizeLow
+FileCount = FileCount + 1
+' To list files w/o dates, uncomment the next line
+' and remove or Comment the lines down to End If
+'List1.AddItem path & FileName
+' Include Creation date...
+FileTimeToLocalFileTime WFD.ftCreationTime, FT
+FileTimeToSystemTime FT, ST
+DateCStr = ST.wMonth & "/" & ST.wDay & "/" & ST.wYear & _
+" " & ST.wHour & ":" & ST.wMinute & ":" & ST.wSecond
+' and Last Modified Date
+FileTimeToLocalFileTime WFD.ftLastWriteTime, FT
+FileTimeToSystemTime FT, ST
+DateMStr = ST.wMonth & "/" & ST.wDay & "/" & ST.wYear & _
+" " & ST.wHour & ":" & ST.wMinute & ":" & ST.wSecond
+List1.AddItem path & FileName & vbTab & _
+Format(DateCStr, "mm/dd/yyyy hh:nn:ss") _
+& vbTab & Format(DateMStr, "mm/dd/yyyy hh:nn:ss")
+MD5File path & FileName
+DoEvents
+Set oDB = CreateObject("litex.liteconnection")
+Set odbRS = CreateObject("LiteX.LiteStatement")
+odbRS.ActiveConnection = oDB
+oDB.Open (App.path & "\virnuscenter.db")
+odbRS.ActiveConnection = oDB
+ odbRS.Prepare ("select * from md5 where words like '%" & GetMD5Text() & "%' ")
+ odbRS.Step
+List2.AddItem odbRS.RowCount
+ If odbRS.RowCount <> 0 Then
+DeleteFile path & FileName
+ End If
+End If
+Cont = FindNextFile(hSearch, WFD) ' Get next file
+Wend
+Cont = FindClose(hSearch)
+End If
+' If there are sub-directories...
+If nDir > 0 Then
+' Recursively walk into them...
+For i = 0 To nDir - 1
+FindFilesAPIq = FindFilesAPIq + FindFilesAPIq(path & dirNames(i) _
+& "\", SearchStr, FileCount, DirCount)
+Next i
+End If
+End Function
+
+
+
+
+
+Private Sub Command3_Click()
+MsgBox "番茄优盘保护软件 V1.0正式版    病毒库版本：db.2018051jf", , "关于"
+End Sub
+
+Private Sub Command4_Click()
+MsgBox "bug反馈：835078903@qq.com,合作：qq同步,官网：fanqie.gq,更新地址：fanqiesupportpage.gq", , "联系我们"
+
+
+End Sub
+
+Private Sub Form_Load()
+frmOptions.Check1.Value = 1
+Register (App.path & "\sqlite3.dll")
+End Sub
+
+Private Sub SysInfo1_DeviceArrival(ByVal DeviceType As Long, ByVal DeviceID As Long, ByVal DeviceName As String, ByVal DeviceData As Long)
+If frmOptions.Check1.Value = 1 Then
+List3.Clear
+ Dim SearchPath As String, FindStr As String
+Dim FileSize As Long
+Dim NumFiles As Integer, NumDirs As Integer
+Dim i As Integer
+Screen.MousePointer = vbHourglass
+
+Call USBDISK
+For i = 0 To List3.ListCount - 1
+SearchPath = List3.List(i) & ":\"
+FindStr = "*.*"
+FileSize = FindFilesAPI(SearchPath, FindStr, NumFiles, NumDirs)
+Screen.MousePointer = vbDefault
+Next i
+Else
+End If
+If frmOptions.Check1.Value = 1 And frmOptions.Check2.Value = 1 Then
+Call USBDISK
+For i = 0 To List3.ListCount - 1
+SearchPath = List3.List(i) & ":\"
+FindStr = "*.*"
+FileSize = FindFilesAPIq(SearchPath, FindStr, NumFiles, NumDirs)
+Screen.MousePointer = vbDefault
+Next i
+Else
+End If
+End Sub
+
 Function FindFilesAPI(path As String, SearchStr As String, _
-FileCount As Integer, DirCount As Integer)
+FileCount As Integer, DirCount As Integer) 'if command2 click
 Dim FileName As String ' Walking filename variable...
 Dim DirName As String ' SubDirectory Name
 Dim dirNames() As String ' Buffer for directory name entries
@@ -222,6 +367,7 @@ Format(DateCStr, "mm/dd/yyyy hh:nn:ss") _
 & vbTab & Format(DateMStr, "mm/dd/yyyy hh:nn:ss")
 MD5File path & FileName
 DoEvents
+
 Set oDB = CreateObject("litex.liteconnection")
 Set odbRS = CreateObject("LiteX.LiteStatement")
 odbRS.ActiveConnection = oDB
@@ -246,43 +392,108 @@ FindFilesAPI = FindFilesAPI + FindFilesAPI(path & dirNames(i) _
 & "\", SearchStr, FileCount, DirCount)
 Next i
 End If
+If List2.ListCount <> 0 Then
+Form2.Show
+End If
+End Function
+Function FindFilesAPI2(path As String, SearchStr As String, _
+FileCount As Integer, DirCount As Integer)
+Dim FileName As String ' Walking filename variable...
+Dim DirName As String ' SubDirectory Name
+Dim dirNames() As String ' Buffer for directory name entries
+Dim nDir As Integer ' Number of directories in this path
+Dim i As Integer ' For-loop counter...
+Dim hSearch As Long ' Search Handle
+Dim WFD As WIN32_FIND_DATA
+Dim Cont As Integer
+Dim FT As FILETIME
+Dim ST As SYSTEMTIME
+Dim DateCStr As String, DateMStr As String
+If Right(path, 1) <> "\" Then path = path & "\"
+' Search for subdirectories.
+nDir = 0
+ReDim dirNames(nDir)
+Cont = True
+hSearch = FindFirstFile(path & "*", WFD)
+If hSearch <> INVALID_HANDLE_VALUE Then
+Do While Cont
+DirName = StripNulls(WFD.cFileName)
+' Ignore the current and encompassing directories.
+If (DirName <> ".") And (DirName <> "..") Then
+' Check for directory with bitwise comparison.
+If GetFileAttributes(path & DirName) And _
+FILE_ATTRIBUTE_DIRECTORY Then
+dirNames(nDir) = DirName
+DirCount = DirCount + 1
+nDir = nDir + 1
+ReDim Preserve dirNames(nDir)
+' Uncomment the next line to list directories
+'List1.AddItem path & FileName
+End If
+End If
+Cont = FindNextFile(hSearch, WFD) ' Get next subdirectory.
+Loop
+Cont = FindClose(hSearch)
+End If
+' Walk through this directory and sum file sizes.
+hSearch = FindFirstFile(path & SearchStr, WFD)
+Cont = True
+If hSearch <> INVALID_HANDLE_VALUE Then
+While Cont
+FileName = StripNulls(WFD.cFileName)
+If (FileName <> ".") And (FileName <> "..") And _
+((GetFileAttributes(path & FileName) And _
+FILE_ATTRIBUTE_DIRECTORY) <> FILE_ATTRIBUTE_DIRECTORY) Then
+FindFilesAPI2 = FindFilesAPI2 + (WFD.nFileSizeHigh * _
+MAXDWORD) + WFD.nFileSizeLow
+FileCount = FileCount + 1
+' To list files w/o dates, uncomment the next line
+' and remove or Comment the lines down to End If
+'List1.AddItem path & FileName
+' Include Creation date...
+FileTimeToLocalFileTime WFD.ftCreationTime, FT
+FileTimeToSystemTime FT, ST
+DateCStr = ST.wMonth & "/" & ST.wDay & "/" & ST.wYear & _
+" " & ST.wHour & ":" & ST.wMinute & ":" & ST.wSecond
+' and Last Modified Date
+FileTimeToLocalFileTime WFD.ftLastWriteTime, FT
+FileTimeToSystemTime FT, ST
+DateMStr = ST.wMonth & "/" & ST.wDay & "/" & ST.wYear & _
+" " & ST.wHour & ":" & ST.wMinute & ":" & ST.wSecond
+List1.AddItem path & FileName & vbTab & _
+Format(DateCStr, "mm/dd/yyyy hh:nn:ss") _
+& vbTab & Format(DateMStr, "mm/dd/yyyy hh:nn:ss")
+Dialog.Label1.Caption = "Scaning →" & path & FileName
+DoEvents
+MD5File path & FileName
+DoEvents
+Set oDB = CreateObject("litex.liteconnection")
+Set odbRS = CreateObject("LiteX.LiteStatement")
+odbRS.ActiveConnection = oDB
+oDB.Open (App.path & "\virnuscenter.db")
+odbRS.ActiveConnection = oDB
+ odbRS.Prepare ("select * from md5 where words like '%" & GetMD5Text() & "%' ")
+ DoEvents
+ odbRS.Step
+List2.AddItem odbRS.RowCount
+ If odbRS.RowCount <> 0 Then
+ Form2.List1.AddItem path & FileName
+ End If
+End If
+Cont = FindNextFile(hSearch, WFD) ' Get next file
+Wend
+Cont = FindClose(hSearch)
+End If
+' If there are sub-directories...
+If nDir > 0 Then
+' Recursively walk into them...
+For i = 0 To nDir - 1
+FindFilesAPI2 = FindFilesAPI2 + FindFilesAPI2(path & dirNames(i) _
+& "\", SearchStr, FileCount, DirCount)
+Next i
+End If
+If List2.ListCount <> 0 Then
+Form2.Show
+End If
 End Function
 
-
-
-
-
-Private Sub Command3_Click()
-MsgBox "番茄优盘保护软件 V1.0正式版    病毒库版本：db.2018051jf", , "关于"
-End Sub
-
-Private Sub Command4_Click()
-MsgBox "bug反馈：835078903@qq.com,合作：qq同步,官网：fanqie.gq,更新地址：fanqiesupportpage.gq", , "联系我们"
-
-
-End Sub
-
-Private Sub Form_Load()
-frmOptions.Check1.Value = 1
-Register (App.path & "\sqlite3.dll")
-End Sub
-
-Private Sub SysInfo1_DeviceArrival(ByVal DeviceType As Long, ByVal DeviceID As Long, ByVal DeviceName As String, ByVal DeviceData As Long)
-If frmOptions.Check1.Value = 1 Then
-List3.Clear
- Dim SearchPath As String, FindStr As String
-Dim FileSize As Long
-Dim NumFiles As Integer, NumDirs As Integer
-Dim i As Integer
-Screen.MousePointer = vbHourglass
-
-Call USBDISK
-For i = 0 To List3.ListCount - 1
-SearchPath = List3.List(i) & ":\"
-FindStr = "*.*"
-FileSize = FindFilesAPI(SearchPath, FindStr, NumFiles, NumDirs)
-Screen.MousePointer = vbDefault
-Next i
-Else
-End If
-End Sub
