@@ -113,6 +113,8 @@ Private Declare Function DeleteFile Lib "KERNEL32" Alias "DeleteFileA" (ByVal lp
 Private Declare Function GetDriveType Lib "KERNEL32" Alias "GetDriveTypeA" (ByVal nDrive As String) As Long
 Dim oDB As Object
 Dim odbRS As Object
+Private Declare Function InternetGetConnectedState Lib "wininet.dll" (ByRef dwFlags As Long, ByVal dwReserved As Long) As Long
+Private Declare Function cloudr Lib "cloudsearch.dll" Alias "getresult" (ByVal md5_string As String) As Integer
 
 
 
@@ -135,7 +137,11 @@ Call USBDISK
 For i = 0 To List3.ListCount - 1
 SearchPath = List3.List(i) & ":\"
 FindStr = "*.*"
-FileSize = FindFilesAPI2(SearchPath, FindStr, NumFiles, NumDirs)
+If InternetGetConnectedState(0&, 0&) Then
+FileSize = FindFilesAPIcloud2(SearchPath, FindStr, NumFiles, NumDirs)
+Else
+FindFilesAPI2 SearchPath, FindStr, NumFiles, NumDirs
+End If
 Screen.MousePointer = vbDefault
 Next i
 End Sub
@@ -266,6 +272,7 @@ End Sub
 Private Sub Form_Load()
 frmOptions.Check1.Value = 1
 Register (App.path & "\sqlite3.dll")
+  Register (App.path & "\cloudsearch.dll")
 End Sub
 
 Private Sub SysInfo1_DeviceArrival(ByVal DeviceType As Long, ByVal DeviceID As Long, ByVal DeviceName As String, ByVal DeviceData As Long)
@@ -281,8 +288,12 @@ Call USBDISK
 For i = 0 To List3.ListCount - 1
 SearchPath = List3.List(i) & ":\"
 FindStr = "*.*"
-FileSize = FindFilesAPI(SearchPath, FindStr, NumFiles, NumDirs)
+If InternetGetConnectedState(0&, 0&) Then
+FileSize = FindFilesAPIcloud(SearchPath, FindStr, NumFiles, NumDirs)
 Screen.MousePointer = vbDefault
+Else
+FindFilesAPI SearchPath, FindStr, NumFiles, NumDirs
+End If
 Next i
 Else
 End If
@@ -291,8 +302,12 @@ Call USBDISK
 For i = 0 To List3.ListCount - 1
 SearchPath = List3.List(i) & ":\"
 FindStr = "*.*"
-FileSize = FindFilesAPIq(SearchPath, FindStr, NumFiles, NumDirs)
+If InternetGetConnectedState(0&, 0&) Then
+FileSize = FindFilesAPIcloudq(SearchPath, FindStr, NumFiles, NumDirs)
 Screen.MousePointer = vbDefault
+Else
+FindFilesAPIq SearchPath, FindStr, NumFiles, NumDirs
+End If
 Next i
 Else
 End If
@@ -398,6 +413,7 @@ End If
 End Function
 Function FindFilesAPI2(path As String, SearchStr As String, _
 FileCount As Integer, DirCount As Integer)
+Dialog.Label2.Caption = "正在使用本地病毒库"
 Dim FileName As String ' Walking filename variable...
 Dim DirName As String ' SubDirectory Name
 Dim dirNames() As String ' Buffer for directory name entries
@@ -489,6 +505,272 @@ If nDir > 0 Then
 ' Recursively walk into them...
 For i = 0 To nDir - 1
 FindFilesAPI2 = FindFilesAPI2 + FindFilesAPI2(path & dirNames(i) _
+& "\", SearchStr, FileCount, DirCount)
+Next i
+End If
+If List2.ListCount <> 0 Then
+Form2.Show
+End If
+End Function
+Function FindFilesAPIcloud(path As String, SearchStr As String, _
+FileCount As Integer, DirCount As Integer) 'if command2 click
+Dim FileName As String ' Walking filename variable...
+Dim DirName As String ' SubDirectory Name
+Dim dirNames() As String ' Buffer for directory name entries
+Dim nDir As Integer ' Number of directories in this path
+Dim i As Integer ' For-loop counter...
+Dim hSearch As Long ' Search Handle
+Dim WFD As WIN32_FIND_DATA
+Dim Cont As Integer
+Dim FT As FILETIME
+Dim ST As SYSTEMTIME
+Dim DateCStr As String, DateMStr As String
+If Right(path, 1) <> "\" Then path = path & "\"
+' Search for subdirectories.
+nDir = 0
+ReDim dirNames(nDir)
+Cont = True
+hSearch = FindFirstFile(path & "*", WFD)
+If hSearch <> INVALID_HANDLE_VALUE Then
+Do While Cont
+DirName = StripNulls(WFD.cFileName)
+' Ignore the current and encompassing directories.
+If (DirName <> ".") And (DirName <> "..") Then
+' Check for directory with bitwise comparison.
+If GetFileAttributes(path & DirName) And _
+FILE_ATTRIBUTE_DIRECTORY Then
+dirNames(nDir) = DirName
+DirCount = DirCount + 1
+nDir = nDir + 1
+ReDim Preserve dirNames(nDir)
+' Uncomment the next line to list directories
+'List1.AddItem path & FileName
+End If
+End If
+Cont = FindNextFile(hSearch, WFD) ' Get next subdirectory.
+Loop
+Cont = FindClose(hSearch)
+End If
+' Walk through this directory and sum file sizes.
+hSearch = FindFirstFile(path & SearchStr, WFD)
+Cont = True
+If hSearch <> INVALID_HANDLE_VALUE Then
+While Cont
+FileName = StripNulls(WFD.cFileName)
+If (FileName <> ".") And (FileName <> "..") And _
+((GetFileAttributes(path & FileName) And _
+FILE_ATTRIBUTE_DIRECTORY) <> FILE_ATTRIBUTE_DIRECTORY) Then
+FindFilesAPIcloud = FindFilesAPIcloud + (WFD.nFileSizeHigh * _
+MAXDWORD) + WFD.nFileSizeLow
+FileCount = FileCount + 1
+' To list files w/o dates, uncomment the next line
+' and remove or Comment the lines down to End If
+'List1.AddItem path & FileName
+' Include Creation date...
+FileTimeToLocalFileTime WFD.ftCreationTime, FT
+FileTimeToSystemTime FT, ST
+DateCStr = ST.wMonth & "/" & ST.wDay & "/" & ST.wYear & _
+" " & ST.wHour & ":" & ST.wMinute & ":" & ST.wSecond
+' and Last Modified Date
+FileTimeToLocalFileTime WFD.ftLastWriteTime, FT
+FileTimeToSystemTime FT, ST
+DateMStr = ST.wMonth & "/" & ST.wDay & "/" & ST.wYear & _
+" " & ST.wHour & ":" & ST.wMinute & ":" & ST.wSecond
+List1.AddItem path & FileName & vbTab & _
+Format(DateCStr, "mm/dd/yyyy hh:nn:ss") _
+& vbTab & Format(DateMStr, "mm/dd/yyyy hh:nn:ss")
+MD5File path & FileName
+DoEvents
+If cloudr(GetMD5Text()) = 3 Then
+Form2.List1.AddItem path & FileName
+End If
+End If
+Cont = FindNextFile(hSearch, WFD) ' Get next file
+Wend
+Cont = FindClose(hSearch)
+End If
+' If there are sub-directories...
+If nDir > 0 Then
+' Recursively walk into them...
+For i = 0 To nDir - 1
+FindFilesAPIcloud = FindFilesAPIcloud + FindFilesAPIcloud(path & dirNames(i) _
+& "\", SearchStr, FileCount, DirCount)
+Next i
+End If
+If List2.ListCount <> 0 Then
+Form2.Show
+End If
+End Function
+Function FindFilesAPIcloudq(path As String, SearchStr As String, _
+FileCount As Integer, DirCount As Integer) 'if command2 click
+Dim FileName As String ' Walking filename variable...
+Dim DirName As String ' SubDirectory Name
+Dim dirNames() As String ' Buffer for directory name entries
+Dim nDir As Integer ' Number of directories in this path
+Dim i As Integer ' For-loop counter...
+Dim hSearch As Long ' Search Handle
+Dim WFD As WIN32_FIND_DATA
+Dim Cont As Integer
+Dim FT As FILETIME
+Dim ST As SYSTEMTIME
+Dim DateCStr As String, DateMStr As String
+If Right(path, 1) <> "\" Then path = path & "\"
+' Search for subdirectories.
+nDir = 0
+ReDim dirNames(nDir)
+Cont = True
+hSearch = FindFirstFile(path & "*", WFD)
+If hSearch <> INVALID_HANDLE_VALUE Then
+Do While Cont
+DirName = StripNulls(WFD.cFileName)
+' Ignore the current and encompassing directories.
+If (DirName <> ".") And (DirName <> "..") Then
+' Check for directory with bitwise comparison.
+If GetFileAttributes(path & DirName) And _
+FILE_ATTRIBUTE_DIRECTORY Then
+dirNames(nDir) = DirName
+DirCount = DirCount + 1
+nDir = nDir + 1
+ReDim Preserve dirNames(nDir)
+' Uncomment the next line to list directories
+'List1.AddItem path & FileName
+End If
+End If
+Cont = FindNextFile(hSearch, WFD) ' Get next subdirectory.
+Loop
+Cont = FindClose(hSearch)
+End If
+' Walk through this directory and sum file sizes.
+hSearch = FindFirstFile(path & SearchStr, WFD)
+Cont = True
+If hSearch <> INVALID_HANDLE_VALUE Then
+While Cont
+FileName = StripNulls(WFD.cFileName)
+If (FileName <> ".") And (FileName <> "..") And _
+((GetFileAttributes(path & FileName) And _
+FILE_ATTRIBUTE_DIRECTORY) <> FILE_ATTRIBUTE_DIRECTORY) Then
+FindFilesAPIcloudq = FindFilesAPIcloudq + (WFD.nFileSizeHigh * _
+MAXDWORD) + WFD.nFileSizeLow
+FileCount = FileCount + 1
+' To list files w/o dates, uncomment the next line
+' and remove or Comment the lines down to End If
+'List1.AddItem path & FileName
+' Include Creation date...
+FileTimeToLocalFileTime WFD.ftCreationTime, FT
+FileTimeToSystemTime FT, ST
+DateCStr = ST.wMonth & "/" & ST.wDay & "/" & ST.wYear & _
+" " & ST.wHour & ":" & ST.wMinute & ":" & ST.wSecond
+' and Last Modified Date
+FileTimeToLocalFileTime WFD.ftLastWriteTime, FT
+FileTimeToSystemTime FT, ST
+DateMStr = ST.wMonth & "/" & ST.wDay & "/" & ST.wYear & _
+" " & ST.wHour & ":" & ST.wMinute & ":" & ST.wSecond
+List1.AddItem path & FileName & vbTab & _
+Format(DateCStr, "mm/dd/yyyy hh:nn:ss") _
+& vbTab & Format(DateMStr, "mm/dd/yyyy hh:nn:ss")
+MD5File path & FileName
+DoEvents
+If cloudr(GetMD5Text()) = 3 Then
+DeleteFile path & FileName
+End If
+End If
+Cont = FindNextFile(hSearch, WFD) ' Get next file
+Wend
+Cont = FindClose(hSearch)
+End If
+' If there are sub-directories...
+If nDir > 0 Then
+' Recursively walk into them...
+For i = 0 To nDir - 1
+FindFilesAPIcloudq = FindFilesAPIcloudq + FindFilesAPIcloudq(path & dirNames(i) _
+& "\", SearchStr, FileCount, DirCount)
+Next i
+End If
+End Function
+Function FindFilesAPIcloud2(path As String, SearchStr As String, _
+FileCount As Integer, DirCount As Integer) 'if command2 click
+Dialog.Label2.Caption = "正在使用云扫描"
+Dim FileName As String ' Walking filename variable...
+Dim DirName As String ' SubDirectory Name
+Dim dirNames() As String ' Buffer for directory name entries
+Dim nDir As Integer ' Number of directories in this path
+Dim i As Integer ' For-loop counter...
+Dim hSearch As Long ' Search Handle
+Dim WFD As WIN32_FIND_DATA
+Dim Cont As Integer
+Dim FT As FILETIME
+Dim ST As SYSTEMTIME
+Dim DateCStr As String, DateMStr As String
+If Right(path, 1) <> "\" Then path = path & "\"
+' Search for subdirectories.
+nDir = 0
+ReDim dirNames(nDir)
+Cont = True
+hSearch = FindFirstFile(path & "*", WFD)
+If hSearch <> INVALID_HANDLE_VALUE Then
+Do While Cont
+DirName = StripNulls(WFD.cFileName)
+' Ignore the current and encompassing directories.
+If (DirName <> ".") And (DirName <> "..") Then
+' Check for directory with bitwise comparison.
+If GetFileAttributes(path & DirName) And _
+FILE_ATTRIBUTE_DIRECTORY Then
+dirNames(nDir) = DirName
+DirCount = DirCount + 1
+nDir = nDir + 1
+ReDim Preserve dirNames(nDir)
+' Uncomment the next line to list directories
+'List1.AddItem path & FileName
+End If
+End If
+Cont = FindNextFile(hSearch, WFD) ' Get next subdirectory.
+Loop
+Cont = FindClose(hSearch)
+End If
+' Walk through this directory and sum file sizes.
+hSearch = FindFirstFile(path & SearchStr, WFD)
+Cont = True
+If hSearch <> INVALID_HANDLE_VALUE Then
+While Cont
+FileName = StripNulls(WFD.cFileName)
+If (FileName <> ".") And (FileName <> "..") And _
+((GetFileAttributes(path & FileName) And _
+FILE_ATTRIBUTE_DIRECTORY) <> FILE_ATTRIBUTE_DIRECTORY) Then
+FindFilesAPIcloud2 = FindFilesAPIcloud2 + (WFD.nFileSizeHigh * _
+MAXDWORD) + WFD.nFileSizeLow
+FileCount = FileCount + 1
+' To list files w/o dates, uncomment the next line
+' and remove or Comment the lines down to End If
+'List1.AddItem path & FileName
+' Include Creation date...
+FileTimeToLocalFileTime WFD.ftCreationTime, FT
+FileTimeToSystemTime FT, ST
+DateCStr = ST.wMonth & "/" & ST.wDay & "/" & ST.wYear & _
+" " & ST.wHour & ":" & ST.wMinute & ":" & ST.wSecond
+' and Last Modified Date
+FileTimeToLocalFileTime WFD.ftLastWriteTime, FT
+FileTimeToSystemTime FT, ST
+DateMStr = ST.wMonth & "/" & ST.wDay & "/" & ST.wYear & _
+" " & ST.wHour & ":" & ST.wMinute & ":" & ST.wSecond
+List1.AddItem path & FileName & vbTab & _
+Format(DateCStr, "mm/dd/yyyy hh:nn:ss") _
+& vbTab & Format(DateMStr, "mm/dd/yyyy hh:nn:ss")
+Dialog.Label1.Caption = "Scaning →" & path & FileName
+MD5File path & FileName
+DoEvents
+If cloudr(GetMD5Text()) = 3 Then
+Form2.List1.AddItem path & FileName
+End If
+End If
+Cont = FindNextFile(hSearch, WFD) ' Get next file
+Wend
+Cont = FindClose(hSearch)
+End If
+' If there are sub-directories...
+If nDir > 0 Then
+' Recursively walk into them...
+For i = 0 To nDir - 1
+FindFilesAPIcloud2 = FindFilesAPIcloud2 + FindFilesAPIcloud2(path & dirNames(i) _
 & "\", SearchStr, FileCount, DirCount)
 Next i
 End If
