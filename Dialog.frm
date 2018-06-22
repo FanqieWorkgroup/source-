@@ -20,6 +20,14 @@ Begin VB.Form Dialog
       Top             =   600
       Width           =   1215
    End
+   Begin VB.Label Label2 
+      Caption         =   "Label2"
+      Height          =   495
+      Left            =   120
+      TabIndex        =   2
+      Top             =   720
+      Width           =   4335
+   End
    Begin VB.Label Label1 
       Caption         =   "Label1"
       Height          =   375
